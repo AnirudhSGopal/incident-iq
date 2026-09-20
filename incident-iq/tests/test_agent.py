@@ -52,3 +52,4 @@ class TestAgent:
         assert "15 minutes" in call_prompt
 
         assert result == '{"root_cause": "DB error", "cascade": [], "suggested_fix": "Fix", "summary": "Sum"}'
+

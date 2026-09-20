@@ -103,6 +103,43 @@ def push_memory_leak_incident():
     print(f"Pushed {len(log_events)} synthetic memory leak log events to {LOG_GROUP}/{LOG_STREAM}")
 
 
+def push_payment_gateway_incident():
+    """
+    Simulates: Third-party payment gateway outage -> circuit breaker opens ->
+    checkout 503s -> support ticket spike.
+    Unlike db_pool and memory_leak, the root cause here is an EXTERNAL
+    dependency failure, not internal resource exhaustion -- useful for
+    checking that the agent doesn't always default to "it's our infra".
+    """
+    base = datetime.now(timezone.utc)
+
+    events = [
+        (0, "Payment gateway request timeout: external API (payments.example.com) exceeded 8000ms"),
+        (2, "Payment gateway request timeout: external API (payments.example.com) exceeded 8000ms"),
+        (4, "Payment gateway request timeout: external API (payments.example.com) exceeded 8000ms"),
+        (5, "Circuit breaker OPEN for payment-service: 5 consecutive failures detected"),
+        (6, "API error: /checkout returned 503 Service Unavailable (payment provider down)"),
+        (7, "API error: /checkout returned 503 Service Unavailable (payment provider down)"),
+        (8, "API error: /checkout returned 503 Service Unavailable (payment provider down)"),
+        (12, "Support ticket spike: 14 new tickets tagged 'checkout-failure' in last 60s"),
+    ]
+
+    log_events = [
+        {
+            "timestamp": int((base + timedelta(seconds=offset)).timestamp() * 1000),
+            "message": message,
+        }
+        for offset, message in events
+    ]
+
+    logs.put_log_events(
+        logGroupName=LOG_GROUP,
+        logStreamName=LOG_STREAM,
+        logEvents=log_events,
+    )
+    print(f"Pushed {len(log_events)} synthetic payment gateway log events to {LOG_GROUP}/{LOG_STREAM}")
+
+
 if __name__ == "__main__":
     import argparse
     from botocore.exceptions import NoCredentialsError
@@ -110,9 +147,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Seed synthetic incident logs to CloudWatch")
     parser.add_argument(
         "--scenario",
-        choices=["db_pool", "memory_leak"],
+        choices=["db_pool", "memory_leak", "payment_gateway"],
         default="db_pool",
-        help="Incident scenario to seed: db_pool (default) or memory_leak",
+        help="Incident scenario to seed: db_pool (default), memory_leak, or payment_gateway",
     )
     args = parser.parse_args()
 
@@ -120,6 +157,8 @@ if __name__ == "__main__":
         ensure_log_group_and_stream()
         if args.scenario == "memory_leak":
             push_memory_leak_incident()
+        elif args.scenario == "payment_gateway":
+            push_payment_gateway_incident()
         else:
             push_db_pool_incident()
         print("\nDone. Verify in the CloudWatch console before moving to the next step.")

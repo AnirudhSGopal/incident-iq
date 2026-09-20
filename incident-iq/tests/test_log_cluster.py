@@ -185,3 +185,10 @@ class TestGetClusteredLogs:
 
         with pytest.raises(ValueError, match="minutes_back must be positive"):
             get_clustered_logs(log_group="/incident-iq/demo", minutes_back=-5)
+
+    def test_log_group_is_required_param(self):
+        """Calls get_clustered_logs without log_group and asserts TypeError."""
+        from tools.log_cluster import get_clustered_logs
+
+        with pytest.raises(TypeError):
+            get_clustered_logs(minutes_back=10)

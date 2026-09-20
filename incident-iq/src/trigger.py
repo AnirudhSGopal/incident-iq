@@ -1,20 +1,37 @@
 """
-Demo trigger — the single "button press" for the live demo.
-Run this to execute the full pipeline end-to-end and print a clean result.
+Main CLI for running an end-to-end incident analysis.
 
-    python src/trigger.py
+Accepts a log group and time window, runs the full analysis pipeline,
+and prints a structured, human-readable report to stdout.
+
+Example:
+    python src/trigger.py --log-group /incident-iq/demo --minutes-back 15
 """
 
+import argparse
 import json
 import sys
 
-import config
 from agent import analyze_incident
 
 
 def main():
-    print("Analyzing incident...\n")
-    raw_result = analyze_incident(log_group=config.LOG_GROUP)
+    parser = argparse.ArgumentParser(description="Analyze CloudWatch logs for a recent incident.")
+    parser.add_argument(
+        "--log-group",
+        required=True,
+        help="The CloudWatch log group to analyze (e.g., /incident-iq/demo)",
+    )
+    parser.add_argument(
+        "--minutes-back",
+        type=int,
+        default=10,
+        help="How many minutes back to look for log events (default: 10)",
+    )
+    args = parser.parse_args()
+
+    print(f"Analyzing incident in {args.log_group} for the last {args.minutes_back} minutes...\n")
+    raw_result = analyze_incident(log_group=args.log_group, minutes_back=args.minutes_back)
 
     try:
         parsed = json.loads(raw_result)

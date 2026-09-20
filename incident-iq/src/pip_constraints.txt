@@ -1,0 +1,4 @@
+# Exclude Windows-only packages that strands-agents pulls in transitively.
+# pywin32 is not needed in the Linux Lambda runtime.
+pywin32==0
+

@@ -46,6 +46,28 @@ def _make_incident_events():
     ]
 
 
+def _make_memory_leak_events():
+    """Build the 8 memory leak incident log events for testing."""
+    base = datetime(2025, 1, 1, 0, 0, 0)
+    raw = [
+        (-480, "High memory usage: 85% of heap used"),
+        (-360, "High memory usage: 92% of heap used"),
+        (-300, "High memory usage: 97% of heap used"),
+        (-180, "OutOfMemoryError: Java heap space"),
+        (-170, "OutOfMemoryError: Java heap space"),
+        (-160, "OutOfMemoryError: Java heap space"),
+        (-60, "Service restarted by health check"),
+        (-30, "Service restarted by health check"),
+    ]
+    return [
+        {
+            "timestamp": int((base + timedelta(seconds=offset)).timestamp() * 1000),
+            "message": message,
+        }
+        for offset, message in raw
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -88,6 +110,31 @@ class TestGetClusteredLogs:
         assert clusters[0]["affected_endpoints"] == []
         assert clusters[1]["affected_endpoints"] == ["/checkout", "/cart"]
         assert clusters[2]["affected_endpoints"] == ["/checkout", "/cart"]
+
+    @patch("tools.log_cluster.logs_client")
+    def test_clusters_memory_leak_incident_data(self, mock_client):
+        """Given the memory leak events, should return 3 distinct clusters."""
+        mock_client.filter_log_events.return_value = {
+            "events": _make_memory_leak_events()
+        }
+
+        from tools.log_cluster import get_clustered_logs
+
+        result = get_clustered_logs(
+            log_group="/incident-iq/demo", minutes_back=10
+        )
+
+        assert "clusters" in result
+        clusters = result["clusters"]
+        assert len(clusters) == 3
+
+        counts = [c["count"] for c in clusters]
+        assert counts == [3, 3, 2]
+
+        messages = [c["message"] for c in clusters]
+        assert any("High memory usage" in m for m in messages)
+        assert any("OutOfMemoryError" in m for m in messages)
+        assert any("Service restarted" in m for m in messages)
 
     @patch("tools.log_cluster.logs_client")
     def test_client_error_propagates(self, mock_client):

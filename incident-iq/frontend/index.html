@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>IncidentIQ</title>
 <style>
   :root {
@@ -10,76 +11,259 @@
     --accent: #ff5c5c;
     --text: #e6edf3;
     --muted: #8b98a5;
+    --border: #2a3441;
+    --input-bg: #0d1117;
   }
+  * { box-sizing: border-box; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    max-width: 720px;
+    max-width: 760px;
     margin: 40px auto;
     padding: 0 20px;
   }
-  h1 { font-size: 1.6rem; }
-  p.tagline { color: var(--muted); margin-top: -8px; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  p.tagline { color: var(--muted); margin-top: 0; margin-bottom: 28px; }
+
+  /* ── Config panel ─────────────────────────────────────────────────── */
+  .config {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .config h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+  }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+  input {
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: #3d4f61; }
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 5px;
+  }
+
+  /* ── Controls ─────────────────────────────────────────────────────── */
+  .controls { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .field-inline {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+  .field-inline label { font-size: 0.8rem; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+  .field-inline input { width: 100%; }
+
   button {
     background: var(--accent);
     color: white;
     border: none;
-    padding: 14px 24px;
-    font-size: 1rem;
+    padding: 10px 22px;
+    font-size: 0.95rem;
     border-radius: 8px;
     cursor: pointer;
-    margin: 20px 0;
+    white-space: nowrap;
+    align-self: flex-end;
+    height: 38px;
   }
-  button:disabled { opacity: 0.6; cursor: default; }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── Output panel ─────────────────────────────────────────────────── */
   .panel {
     background: var(--panel);
+    border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 20px;
-    margin-top: 16px;
+    padding: 20px 24px;
     white-space: pre-wrap;
-    line-height: 1.5;
+    line-height: 1.6;
+    min-height: 60px;
+    font-size: 0.92rem;
   }
-  .label { color: var(--accent); font-weight: 600; }
+  .label { color: var(--accent); font-weight: 700; }
+  .error { color: #ff8080; }
+
+  /* ── Status bar ───────────────────────────────────────────────────── */
+  .status {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 10px;
+    min-height: 18px;
+  }
 </style>
 </head>
 <body>
   <h1>IncidentIQ</h1>
   <p class="tagline">Turns messy production logs into a root-cause answer in seconds.</p>
 
-  <button id="analyzeBtn" onclick="analyze()">Analyze Incident</button>
+  <!-- ── Configuration ─────────────────────────────────────────────── -->
+  <div class="config">
+    <h2>Configuration</h2>
 
-  <div class="panel" id="output">Click "Analyze Incident" to run the demo.</div>
+    <div class="field">
+      <label for="endpointInput">API Endpoint URL</label>
+      <input
+        id="endpointInput"
+        type="url"
+        placeholder="https://xxxxxxxx.execute-api.us-west-2.amazonaws.com/prod/analyze"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div class="field">
+      <label for="apiKeyInput">API Key (x-api-key)</label>
+      <input
+        id="apiKeyInput"
+        type="password"
+        placeholder="Your API Gateway API key"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <span class="field-hint">Not saved — re-enter each session for security.</span>
+    </div>
+  </div>
+
+  <!-- ── Run controls ───────────────────────────────────────────────── -->
+  <div class="controls">
+    <div class="field-inline">
+      <label for="logGroupInput">CloudWatch Log Group</label>
+      <input
+        id="logGroupInput"
+        type="text"
+        placeholder="/my-app/production"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+    <div class="field-inline" style="max-width:110px;">
+      <label for="minutesInput">Minutes back</label>
+      <input
+        id="minutesInput"
+        type="number"
+        value="10"
+        min="1"
+        max="1440"
+      />
+    </div>
+    <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+  </div>
+
+  <!-- ── Output ─────────────────────────────────────────────────────── -->
+  <div class="panel" id="output">Fill in the configuration above, then click Analyze.</div>
+  <div class="status" id="status"></div>
 
   <script>
-    // Point this at your deployed AgentCore endpoint (or a small Lambda/API
-    // Gateway wrapper in front of it). For a purely local demo, you can
-    // instead just run src/trigger.py in a terminal and skip this file.
-    const AGENT_ENDPOINT = "REPLACE_WITH_YOUR_AGENTCORE_OR_API_ENDPOINT";
+    // ── Persist non-sensitive config to localStorage ────────────────────
+    // Note: apiKeyInput is explicitly excluded — secrets must never be stored in browser storage
+    const FIELDS = ["endpointInput", "logGroupInput", "minutesInput"];
 
+    // Purge any previously stored API key from past sessions
+    localStorage.removeItem("incidentiq_apiKeyInput");
+
+    FIELDS.forEach(id => {
+      const el = document.getElementById(id);
+      const saved = localStorage.getItem("incidentiq_" + id);
+      if (saved !== null) el.value = saved;
+      el.addEventListener("input", () =>
+        localStorage.setItem("incidentiq_" + id, el.value)
+      );
+    });
+
+    // ── Main analyze function ──────────────────────────────────────────
     async function analyze() {
-      const btn = document.getElementById("analyzeBtn");
-      const out = document.getElementById("output");
+      const endpoint  = document.getElementById("endpointInput").value.trim();
+      const apiKey    = document.getElementById("apiKeyInput").value.trim();
+      const logGroup  = document.getElementById("logGroupInput").value.trim();
+      const minutes   = parseInt(document.getElementById("minutesInput").value, 10) || 10;
+
+      const btn    = document.getElementById("analyzeBtn");
+      const out    = document.getElementById("output");
+      const status = document.getElementById("status");
+
+      // ── Validate ───────────────────────────────────────────────────
+      if (!endpoint) {
+        out.innerHTML = '<span class="error">Please enter your API Endpoint URL.</span>';
+        return;
+      }
+      if (!apiKey) {
+        out.innerHTML = '<span class="error">Please enter your API Key.</span>';
+        return;
+      }
+      if (!logGroup) {
+        out.innerHTML = '<span class="error">Please enter a CloudWatch Log Group name.</span>';
+        return;
+      }
+
       btn.disabled = true;
-      out.textContent = "Analyzing...";
+      out.textContent = "Analyzing…";
+      status.textContent = `POST ${endpoint}`;
 
       try {
-        const targetEndpoint = AGENT_ENDPOINT.startsWith("REPLACE_") ? "/api/analyze" : AGENT_ENDPOINT;
-        const res = await fetch(targetEndpoint, {
+        const res = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ log_group: "/incident-iq/demo", minutes_back: 10 }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({ log_group: logGroup, minutes_back: minutes }),
         });
+
+        status.textContent = `HTTP ${res.status} ${res.statusText}`;
+
         const data = await res.json();
 
+        if (!res.ok) {
+          out.innerHTML =
+            `<span class="error">Error ${res.status}:</span>\n` +
+            JSON.stringify(data, null, 2);
+          return;
+        }
+
+        const result = data.result || data;
+
         out.innerHTML =
-          `<span class="label">ROOT CAUSE:</span>\n${data.root_cause}\n\n` +
-          `<span class="label">CASCADE:</span>\n${(data.cascade || []).map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\n` +
-          `<span class="label">SUGGESTED FIX:</span>\n${data.suggested_fix}\n\n` +
-          `<span class="label">SUMMARY:</span>\n${data.summary}`;
+          `<span class="label">ROOT CAUSE:</span>\n${result.root_cause ?? "—"}\n\n` +
+          `<span class="label">CASCADE:</span>\n${
+            Array.isArray(result.cascade) && result.cascade.length
+              ? result.cascade.map((c, i) => `${i + 1}. ${c}`).join("\n")
+              : "—"
+          }\n\n` +
+          `<span class="label">SUGGESTED FIX:</span>\n${result.suggested_fix ?? "—"}\n\n` +
+          `<span class="label">SUMMARY:</span>\n${result.summary ?? "—"}\n\n` +
+          `<span class="label">INCIDENT ID:</span>\n${data.incident_id ?? "—"}`;
+
       } catch (err) {
-        out.textContent = "Error calling agent: " + err.message +
-          "\n\n(Fallback: run 'python src/trigger.py' in your terminal for the local demo.)";
+        status.textContent = "Request failed";
+        out.innerHTML =
+          `<span class="error">Network error:</span> ${err.message}\n\n` +
+          `Check that the endpoint URL is correct and that CORS is enabled on your API Gateway stage.`;
       } finally {
         btn.disabled = false;
       }

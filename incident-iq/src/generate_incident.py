@@ -33,7 +33,7 @@ def ensure_log_group_and_stream():
         print(f"Log stream {LOG_STREAM} already exists")
 
 
-def push_synthetic_incident():
+def push_db_pool_incident():
     """
     Simulates: DB connection pool exhaustion -> API timeouts -> 502s from load balancer.
     Offsets are in seconds from 'now' so the incident always looks recent.
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         if args.scenario == "memory_leak":
             push_memory_leak_incident()
         else:
-            push_synthetic_incident()
+            push_db_pool_incident()
         print("\nDone. Verify in the CloudWatch console before moving to the next step.")
     except NoCredentialsError:
         print("\n[Notice] No AWS credentials found.")

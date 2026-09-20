@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  IncidentIQ — serverless incident analysis pipeline.
+  Lambda reads CloudWatch logs, reasons with Bedrock Claude,
+  persists results to DynamoDB, and exposes a POST /analyze endpoint
+  protected by an API key.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  LogGroupName:
+    Type: String
+    Default: /incident-iq/demo
+    Description: >
+      The CloudWatch log group this function is allowed to read.
+      The IAM policy is scoped to this exact ARN — no wildcards.
+
+# ---------------------------------------------------------------------------
+# Globals
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 60
+    MemorySize: 512
+    Environment:
+      Variables:
+        LOG_GROUP: !Ref LogGroupName
+        DYNAMODB_TABLE: !Ref IncidentIQHistory
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ── DynamoDB ──────────────────────────────────────────────────────────────
+  IncidentIQHistory:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: IncidentIQHistory
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: incident_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: incident_id
+          KeyType: HASH
+
+  # ── REST API (Api type supports ApiKeyRequired natively) ──────────────────
+  IncidentIQApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: incident-iq-api
+      StageName: prod
+      Auth:
+        ApiKeyRequired: true
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          UsagePlanName: incident-iq-usage-plan
+          Throttle:
+            RateLimit: 10
+            BurstLimit: 20
+
+  # ── Lambda ────────────────────────────────────────────────────────────────
+  IncidentIQAnalyzeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: incident-iq-analyze
+      CodeUri: ../src/
+      Handler: lambda_handler.handler
+      Description: Analyzes CloudWatch incident logs via Bedrock and stores results in DynamoDB.
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            # 1. CloudWatch Logs — scoped to the exact parameterized log group
+            - Sid: AllowCloudWatchLogs
+              Effect: Allow
+              Action:
+                - logs:FilterLogEvents
+                - logs:DescribeLogGroups
+              Resource:
+                - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}"
+                - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*"
+
+            # 2. Bedrock — scoped to Anthropic foundation models only
+            - Sid: AllowBedrockAnthropic
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.*"
+
+            # 3. DynamoDB — scoped to the IncidentIQHistory table only
+            - Sid: AllowDynamoDBIncidentHistory
+              Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt IncidentIQHistory.Arn
+      Events:
+        AnalyzePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref IncidentIQApi
+            Path: /analyze
+            Method: POST
+            Auth:
+              ApiKeyRequired: true
+
+  # ── SNS Alerts Topic ──────────────────────────────────────────────────────
+  IncidentIQAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: incident-iq-alerts
+
+  # ── CloudWatch Alarm ──────────────────────────────────────────────────────
+  IncidentIQErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: incident-iq-errors
+      AlarmDescription: Alarms when IncidentIQAnalyzeFunction encounters errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IncidentIQAnalyzeFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref IncidentIQAlertsTopic
+      TreatMissingData: notBreaching
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  ApiEndpoint:
+    Description: "POST /analyze endpoint URL"
+    Value: !Sub "https://${IncidentIQApi}.execute-api.${AWS::Region}.amazonaws.com/prod/analyze"
+
+  ApiKeyRetrievalCommand:
+    Description: "Run this command after deploy to get the generated API key value"
+    Value: !Sub >-
+      aws apigateway get-api-keys
+      --include-values
+      --query "items[?name=='incident-iq-api-prod'].value | [0]"
+      --output text
+      --region ${AWS::Region}
+
+  DynamoDBTableName:
+    Description: "DynamoDB table name for incident history"
+    Value: !Ref IncidentIQHistory
+
+  LambdaFunctionArn:
+    Description: "ARN of the analyze Lambda function"
+    Value: !GetAtt IncidentIQAnalyzeFunction.Arn
+
+  AlertsTopicArn:
+    Description: >-
+      ARN of the alerts SNS topic. Run:
+      aws sns subscribe --topic-arn <ARN> --protocol email --notification-endpoint you@example.com
+    Value: !Ref IncidentIQAlertsTopic
+
+
